@@ -30,7 +30,7 @@ namespace BunnyCDN.Net.Storage
         /// </summary>
         /// <param name="value">The object that will be serialized</param>
         /// <returns>JSON serialized object</returns>
-        public static string Serialize<T>(object value)
+        public static string Serialize(object value)
         {
 #if NETSTANDARD2_0
             return JsonConvert.SerializeObject(value);
