@@ -8,7 +8,7 @@ using System.Text.Json;
 
 namespace BunnyCDN.Net.Storage
 {
-    internal class Serializer
+    public class Serializer
     {
         /// <summary>
         /// Deserialize the object with the most optimal serializer
