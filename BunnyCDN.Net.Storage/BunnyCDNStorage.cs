@@ -96,11 +96,15 @@ namespace BunnyCDN.Net.Storage
         /// <param name="path">Destination path</param>
         /// <param name="sha256Checksum">The SHA256 checksum of the uploaded content. The server will compare the final SHA256 to the 
         /// checksum and reject the request in case the checksums do not match.</param>
-        public async Task UploadAsync(Stream stream, string path, string sha256Checksum = null)
+        /// <param name="validateChecksum">Generate the SHA256 checksum of the uploading content and append to request for server-side verification.</param>
+        public async Task UploadAsync(Stream stream, string path, string sha256Checksum = null, bool validateChecksum = false)
         {
             var normalizedPath = this.NormalizePath(path, false);
             using (var content = new StreamContent(stream))
             {
+                if (string.IsNullOrWhiteSpace(sha256Checksum))
+                    sha256Checksum = Checksum.Generate(stream);
+
                 await handleStreamUpload(content, normalizedPath, sha256Checksum);
             }
         }
