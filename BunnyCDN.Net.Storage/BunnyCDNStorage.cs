@@ -95,19 +95,20 @@ namespace BunnyCDN.Net.Storage
         /// <param name="stream">Stream containing file contents</param>
         /// <param name="path">Destination path</param>
         /// <param name="sha256Checksum">The SHA256 checksum of the uploaded content. The server will compare the final SHA256 to the 
-        /// checksum and reject the request in case the checksums do not match.</param>
-        /// <param name="validateChecksum">Generate the SHA256 checksum of the uploading content and append to request for server-side verification.</param>
-        public async Task UploadAsync(Stream stream, string path, string sha256Checksum = null, bool validateChecksum = false)
-        {
-            var normalizedPath = this.NormalizePath(path, false);
-            using (var content = new StreamContent(stream))
-            {
-                if (string.IsNullOrWhiteSpace(sha256Checksum))
-                    sha256Checksum = Checksum.Generate(stream);
+        /// checksum and reject the request in case the checksums do not match (ignored if left blank).</param>
+        public async Task UploadAsync(Stream stream, string path, string sha256Checksum = null)
+            => await handleStreamUpload(stream, path, false, sha256Checksum);
 
-                await handleStreamUpload(content, normalizedPath, sha256Checksum);
-            }
-        }
+        /// <summary>
+        /// Upload an object from a stream (missing path will be created)
+        /// </summary>
+        /// <param name="stream">Stream containing file contents</param>
+        /// <param name="path">Destination path</param>
+        /// <param name="validateChecksum">Generate the SHA256 checksum of the uploading content and append to request for server-side verification.</param>
+        /// <param name="sha256Checksum">The SHA256 checksum of the uploaded content. The server will compare the final SHA256 to the 
+        /// checksum and reject the request in case the checksums do not match (will be generated if left null & validateChecksum is true).</param>
+        public async Task UploadAsync(Stream stream, string path, bool validateChecksum, string sha256Checksum = null)
+            => await handleStreamUpload(stream, path, validateChecksum, sha256Checksum);
 
         /// <summary>
         /// Upload a local file to the storage
@@ -115,36 +116,40 @@ namespace BunnyCDN.Net.Storage
         /// <param name="localFilePath">Local path of file to upload</param>
         /// <param name="path">Destination path</param>
         /// <param name="validateChecksum">Generate a SHA256 checksum of the uploaded content and append to request for server-side verification.</param>
-        public async Task UploadAsync(string localFilePath, string path, bool validateChecksum = false)
+        /// <param name="sha256Checksum">The SHA256 checksum of the uploaded content. The server will compare the final SHA256 to the 
+        /// checksum and reject the request in case the checksums do not match (will be generated if left null & validateChecksum is true).</param>
+        public async Task UploadAsync(string localFilePath, string path, bool validateChecksum = false, string sha256Checksum = null)
         {
-            var normalizedPath = this.NormalizePath(path, false);
             using (var fileStream = new FileStream(localFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 64))
             {
-                using (var content = new StreamContent(fileStream))
-                {
-                    await handleStreamUpload(content, normalizedPath,
-                        validateChecksum ? Checksum.Generate(fileStream) : null);
-                }
+                    await handleStreamUpload(fileStream, path, validateChecksum, sha256Checksum);
             }
         }
 
-        private async Task handleStreamUpload(StreamContent content, string normalizedPath, string sha256Checksum = null)
+        private async Task handleStreamUpload(Stream stream, string path, bool validateChecksum = false, string sha256Checksum = null)
         {
-            var message = new HttpRequestMessage(HttpMethod.Put, normalizedPath)
+            var normalizedPath = this.NormalizePath(path, false);
+            using (var content = new StreamContent(stream))
             {
-                Content = content
-            };
+                var message = new HttpRequestMessage(HttpMethod.Put, normalizedPath)
+                {
+                    Content = content
+                };
 
-            if (!string.IsNullOrWhiteSpace(sha256Checksum))
-                message.Headers.Add("Checksum", sha256Checksum);
+                if (string.IsNullOrWhiteSpace(sha256Checksum) && validateChecksum)
+                    sha256Checksum = Checksum.Generate(stream);
 
-            var response = await _http.SendAsync(message);
-            if(!response.IsSuccessStatusCode)
-            {
-                if (response.StatusCode == HttpStatusCode.BadRequest && !string.IsNullOrWhiteSpace(sha256Checksum))
-                    throw new BunnyCDNStorageChecksumException(normalizedPath, sha256Checksum);
-                else
-                    throw this.MapResponseToException(response.StatusCode, normalizedPath);
+                if (!string.IsNullOrWhiteSpace(sha256Checksum))
+                    message.Headers.Add("Checksum", sha256Checksum);
+
+                var response = await _http.SendAsync(message);
+                if(!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode == HttpStatusCode.BadRequest && !string.IsNullOrWhiteSpace(sha256Checksum))
+                        throw new BunnyCDNStorageChecksumException(normalizedPath, sha256Checksum);
+                    else
+                        throw this.MapResponseToException(response.StatusCode, normalizedPath);
+                }
             }
         }
         #endregion
